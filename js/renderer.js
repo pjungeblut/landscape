@@ -28,6 +28,24 @@ Landscape.Renderer = function(canvas) {
 
 
 /**
+ * @type {function(this:Window, function(number) : ?) : number} Wrapper for
+ *     requestAnimationFrame with vendor prefixes.
+ */
+Landscape.Renderer.requestAnimationFrame = window.requestAnimationFrame ||
+    window.mozRequestAnimationFrame ||
+    window.webkitRequestAnimationFrame ||
+    window.msRequestAnimationFrame;
+
+
+/**
+ * @type {function(number)} Wrapper for cancelAnimationFrame with vendor
+ *     prefixes.
+ */
+Landscape.Renderer.cancelAnimationFrame = window.cancelAnimationFrame ||
+    window.mozCancelAnimationFrame;
+
+
+/**
  * Sets up the canvas for use. Handles context loss.
  *
  * @param {!HTMLCanvasElement} canvas The canvas to set up.
@@ -43,7 +61,7 @@ Landscape.Renderer.setUpCanvas = function(canvas) {
   canvas.addEventListener('webglcontextlost', function(event) {
     event.preventDefault();
     if (this.renderingLoopId_ !== 0) {
-      window.cancelAnimationFrame(this.renderingLoopId_);
+      Landscape.Renderer.cancelAnimationFrame(this.renderingLoopId_);
     }
   }.bind(this), false);
 
