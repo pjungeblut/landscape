@@ -3,6 +3,18 @@
   <head>
     <title>Landscape Renderer</title>
     <link rel="stylesheet" type="text/css" href="layout.css">
+    <script id="dummyVertexShader" type="x-shader/x-vertex">
+      attribute vec2 a_position;
+
+      void main() {
+        gl_Position = vec4(a_position, 0, 1);
+      }
+    </script>
+    <script id="dummyFragmentShader" type="x-shader/x-fragment">
+      void main() {
+        gl_FragColor = vec4(0, 1, 0, 1);
+      }
+    </script>
   </head>
   <body>
     <canvas id="landscapeCanvas"></canvas>
