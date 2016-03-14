@@ -60,8 +60,7 @@ Landscape.Renderer.cancelAnimationFrame_ = window.cancelAnimationFrame ||
  * @private {!Array.<string>} The ids of the script tags containing the shaders.
  */
 Landscape.Renderer.SHADER_IDS_ = [
-    'dummyVertex',
-    'dummyFragment',
+    'wireframeVertex',
     'wireframeFragment'];
 
 
@@ -70,8 +69,7 @@ Landscape.Renderer.SHADER_IDS_ = [
  *     combination of the shaders for the programs.
  */
 Landscape.Renderer.PROGRAM_SHADERS_ = [
-    {id: 'dummy', vertex: 'dummyVertex', fragment: 'dummyFragment'},
-    {id: 'wireframe', vertex: 'dummyVertex', fragment: 'wireframeFragment'}];
+    {id: 'wireframe', vertex: 'wireframeVertex', fragment: 'wireframeFragment'}];
 
 
 /**
@@ -135,6 +133,11 @@ Landscape.Renderer.setUpWebGL_ = function() {
   // fail. In this case all shaders/program already created successfully need
   // to be deleted.
   try {
+    // Enables the required extensions.
+    // Wireframe rendering needs the OES_standard_derivates extension to avoid
+    // aliasing effects.
+    Landscape.Renderer.enableExtension_(gl, 'OES_standard_derivatives');
+
     // Compiles the shaders.
     var shaders = {};
     for (var i = 0; i < Landscape.Renderer.SHADER_IDS_.length; i++) {
@@ -166,6 +169,23 @@ Landscape.Renderer.setUpWebGL_ = function() {
   }
 
   return gl;
+};
+
+
+/**
+ * Enables a WebGL extension.
+ *
+ * Throws an error, if the extension is not available.
+ *
+ * @param {!WebGLRenderingContext} gl The WebGL context.
+ * @param {string} extension The name of the extension.
+ * @private
+ */
+Landscape.Renderer.enableExtension_ = function(gl, extension) {
+  var ext = gl.getExtension(extension);
+  if (!ext) {
+    throw new Error('Could not load extension: ' + extension);
+  }
 };
 
 
@@ -273,7 +293,7 @@ Landscape.Renderer.prototype.renderFrame_ = function(timestamp) {
   // Resize the canvas to the current display size.
   this.resize_();
 
-  this.renderGreenRectangle();
+  this.renderWireframeRectangle();
 
   // Proceed with the next frame.
   this.renderingLoopId_ = Landscape.Renderer.requestAnimationFrame_(
@@ -310,11 +330,11 @@ Landscape.Renderer.prototype.resize_ = function() {
 };
 
 
-Landscape.Renderer.prototype.renderGreenRectangle = function() {
-  var program = this.programs_['dummy'];
+Landscape.Renderer.prototype.renderWireframeRectangle = function() {
+  var program = this.programs_['wireframe'];
   this.gl_.useProgram(program);
 
-  var positionLoc = this.gl_.getAttribLocation(program, "a_position");
+  var positionLoc = this.gl_.getAttribLocation(program, 'a_position');
   var buffer = this.gl_.createBuffer();
   this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, buffer);
   this.gl_.bufferData(
@@ -327,5 +347,21 @@ Landscape.Renderer.prototype.renderGreenRectangle = function() {
       this.gl_.STATIC_DRAW);
   this.gl_.enableVertexAttribArray(positionLoc);
   this.gl_.vertexAttribPointer(positionLoc, 2, this.gl_.FLOAT, false, 0, 0);
+
+  var barycentricLoc = this.gl_.getAttribLocation(program, 'a_barycentric');
+  var buffer2 = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, buffer2);
+  this.gl_.bufferData(
+      this.gl_.ARRAY_BUFFER,
+      new Float32Array([
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0
+      ]),
+      this.gl_.STATIC_DRAW);
+  this.gl_.enableVertexAttribArray(barycentricLoc);
+  this.gl_.vertexAttribPointer(barycentricLoc, 3, this.gl_.FLOAT, false, 0, 0);
+
   this.gl_.drawArrays(this.gl_.TRIANGLE_STRIP, 0, 4);
 };
