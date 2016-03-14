@@ -60,8 +60,9 @@ Landscape.Renderer.cancelAnimationFrame_ = window.cancelAnimationFrame ||
  * @private {!Array.<string>} The ids of the script tags containing the shaders.
  */
 Landscape.Renderer.SHADER_IDS_ = [
-    'dummyVertexShader',
-    'dummyFragmentShader'];
+    'dummyVertex',
+    'dummyFragment',
+    'wireframeFragment'];
 
 
 /**
@@ -69,7 +70,8 @@ Landscape.Renderer.SHADER_IDS_ = [
  *     combination of the shaders for the programs.
  */
 Landscape.Renderer.PROGRAM_SHADERS_ = [
-    {id: 'dummy', vertex: 'dummyVertexShader', fragment: 'dummyFragmentShader'}];
+    {id: 'dummy', vertex: 'dummyVertex', fragment: 'dummyFragment'},
+    {id: 'wireframe', vertex: 'dummyVertex', fragment: 'wireframeFragment'}];
 
 
 /**
@@ -249,8 +251,81 @@ Landscape.Renderer.createProgram = function(gl, vertexShader, fragmentSahder) {
 
 
 /**
- * Starts the rendering loop. Sets up a requestAnimationFrame loop.
+ * Starts the rendering loop. Starts a requestAnimationFrame loop.
  */
 Landscape.Renderer.prototype.startRendering = function() {
-  // TODO (pjungeblut): Start the rendering loop.
+  if (this.renderingLoopId_ != 0) {
+    Landscape.Renderer.cancelAnimationFrame_(this.renderingLoopId_);
+  }
+  this.renderingLoopId_ = Landscape.Renderer.requestAnimationFrame_(
+      this.renderFrame_.bind(this));
+};
+
+
+/**
+ * Renders a frame.
+ *
+ * @param {number} timestamp The timestamp this frame was
+ *     triggered.
+ * @private
+ */
+Landscape.Renderer.prototype.renderFrame_ = function(timestamp) {
+  // Resize the canvas to the current display size.
+  this.resize_();
+
+  this.renderGreenRectangle();
+
+  // Proceed with the next frame.
+  this.renderingLoopId_ = Landscape.Renderer.requestAnimationFrame_(
+      this.renderFrame_.bind(this));
+};
+
+
+/**
+ * Resizes the WebGL context to fill the whole canvas.
+ * Also takes the device pixel ratio into account. This might be a serious
+ * performance killer.
+ * http://webglfundamentals.org/webgl/lessons/webgl-resizing-the-canvas.html
+ *
+ * @private
+ */
+Landscape.Renderer.prototype.resize_ = function() {
+  var pixelRatio = window.devicePixelRatio || 1;
+
+  // Looks up the size the browser displays the canvas in CSS pixels and compute
+  // the size needed to make the drawing buffer match it in device pixels.
+  var displayWidth = Math.floor(this.gl_.canvas.clientWidth * pixelRatio);
+  var displayHeight = Math.floor(this.gl_.canvas.clientHeight * pixelRatio);
+
+  // Checks, whether the canvas is of a different size.
+  if (this.gl_.canvas.width != displayWidth ||
+      this.gl_.canvas.height != displayHeight) {
+    // Resizes the canvas.
+    this.gl_.canvas.width = displayWidth;
+    this.gl_.canvas.height = displayHeight;
+
+    // Sets the WebGL viewport.
+    this.gl_.viewport(0, 0, displayWidth, displayHeight);
+  }
+};
+
+
+Landscape.Renderer.prototype.renderGreenRectangle = function() {
+  var program = this.programs_['dummy'];
+  this.gl_.useProgram(program);
+
+  var positionLoc = this.gl_.getAttribLocation(program, "a_position");
+  var buffer = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, buffer);
+  this.gl_.bufferData(
+      this.gl_.ARRAY_BUFFER,
+      new Float32Array([
+      -0.5, -0.5,
+      0.5, -0.5,
+      -0.5, 0.5,
+      0.5, 0.5]),
+      this.gl_.STATIC_DRAW);
+  this.gl_.enableVertexAttribArray(positionLoc);
+  this.gl_.vertexAttribPointer(positionLoc, 2, this.gl_.FLOAT, false, 0, 0);
+  this.gl_.drawArrays(this.gl_.TRIANGLE_STRIP, 0, 4);
 };

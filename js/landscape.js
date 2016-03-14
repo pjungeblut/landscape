@@ -32,6 +32,7 @@ Landscape.CANVAS_ID = 'landscapeCanvas';
    */
   function initRendering() {
     var renderer = new Landscape.Renderer(getCanvas());
+    renderer.startRendering();
   }
 
   // Starts everything.
