@@ -26,6 +26,12 @@ Landscape.Renderer = function(canvas) {
   Landscape.Renderer.setUpCanvas_.call(this);
 
   /**
+   * @private {!Object.<string, !WebGLProgram>} The programs as defined in
+   *     in Landscape.Renderer.PROGRAM_SHADERS_.
+   */
+  this.programs_ = {};
+
+  /**
    * @private {!WebGLRenderingContext} The WebGL rendering context.
    */
   this.gl_ = Landscape.Renderer.setUpWebGL_.call(this);
@@ -33,21 +39,37 @@ Landscape.Renderer = function(canvas) {
 
 
 /**
- * @type {function(this:Window, function(number) : ?) : number} Wrapper for
+ * @private {function(this:Window, function(number) : ?) : number} Wrapper for
  *     requestAnimationFrame with vendor prefixes.
  */
-Landscape.Renderer.requestAnimationFrame = window.requestAnimationFrame ||
+Landscape.Renderer.requestAnimationFrame_ = window.requestAnimationFrame ||
     window.mozRequestAnimationFrame ||
     window.webkitRequestAnimationFrame ||
     window.msRequestAnimationFrame;
 
 
 /**
- * @type {function(number)} Wrapper for cancelAnimationFrame with vendor
+ * @private {function(number)} Wrapper for cancelAnimationFrame with vendor
  *     prefixes.
  */
-Landscape.Renderer.cancelAnimationFrame = window.cancelAnimationFrame ||
+Landscape.Renderer.cancelAnimationFrame_ = window.cancelAnimationFrame ||
     window.mozCancelAnimationFrame;
+
+
+/**
+ * @private {!Array.<string>} The ids of the script tags containing the shaders.
+ */
+Landscape.Renderer.SHADER_IDS_ = [
+    'dummyVertexShader',
+    'dummyFragmentShader'];
+
+
+/**
+ * @private {!Array.<!{id: string, vertex: string, fragment: string}>} The
+ *     combination of the shaders for the programs.
+ */
+Landscape.Renderer.PROGRAM_SHADERS_ = [
+    {id: 'dummy', vertex: 'dummyVertexShader', fragment: 'dummyFragmentShader'}];
 
 
 /**
@@ -66,15 +88,15 @@ Landscape.Renderer.setUpCanvas_ = function() {
   this.canvas_.addEventListener('webglcontextlost', function(event) {
     event.preventDefault();
     if (this.renderingLoopId_ !== 0) {
-      Landscape.Renderer.cancelAnimationFrame(this.renderingLoopId_);
+      Landscape.Renderer.cancelAnimationFrame_(this.renderingLoopId_);
     }
   }.bind(this), false);
 
   // Re-setup the whole WebGL.
   this.canvas_.addEventListener('webglcontextrestored', function() {
     this.gl_ = Landscape.Renderer.setUpWebGL_();
-    // TODO (pjungeblut): Rendering loop needs to be restarted.
-  }, false);
+    this.startRendering();
+  }.bind(this), false);
 };
 
 
@@ -107,7 +129,39 @@ Landscape.Renderer.setUpWebGL_ = function() {
     throw new Error('Could not get a WebGL context.');
   }
 
-  // TODO (pjungeblut): Compile shaders, create programs.
+  // The routines to compile shaders and link programs throw errors if they
+  // fail. In this case all shaders/program already created successfully need
+  // to be deleted.
+  try {
+    // Compiles the shaders.
+    var shaders = {};
+    for (var i = 0; i < Landscape.Renderer.SHADER_IDS_.length; i++) {
+      var id = Landscape.Renderer.SHADER_IDS_[i];
+      var shader = Landscape.Renderer.createShaderFromScript(gl, id);
+      shaders[id] = shader;
+    }
+
+    // Combines shaders to the programs.
+    for (var i = 0; i < Landscape.Renderer.PROGRAM_SHADERS_.length; i++) {
+      var id = Landscape.Renderer.PROGRAM_SHADERS_[i].id;
+      var vertex = shaders[Landscape.Renderer.PROGRAM_SHADERS_[i].vertex];
+      var fragment = shaders[Landscape.Renderer.PROGRAM_SHADERS_[i].fragment];
+      var program = Landscape.Renderer.createProgram(gl, vertex, fragment);
+      this.programs_[id] = program;
+    }
+  } catch (e) {
+    // There was an error when creating a shader/a program.
+    // Deletes all shaders and programs.
+    for (var shader in shaders) {
+      gl.deleteShader(shaders[shader]);
+    }
+    for (var program in this.programs_) {
+      gl.deleteProgram(this.programs_[program]);
+    }
+
+    // Throw the error again to stop the program without any memory leaking.
+    throw new Error(e.message);
+  }
 
   return gl;
 };
@@ -167,6 +221,8 @@ Landscape.Renderer.createShaderFromScript = function(gl, scriptId) {
 
 /**
  * Creates a WebGLProgram.
+ *
+ * Throws an error, if a program could not be created/linked.
  * 
  * @param {!WebGLRenderingContext} gl The WebGL context.
  * @param {!WebGLShader} vertexShader The vertex shader.
