@@ -158,7 +158,7 @@ Landscape.Renderer.setUpWebGL_ = function() {
     var shaders = {};
     for (var i = 0; i < Landscape.Renderer.SHADER_IDS_.length; i++) {
       var id = Landscape.Renderer.SHADER_IDS_[i];
-      var shader = Landscape.Renderer.createShaderFromScript(gl, id);
+      var shader = Landscape.Renderer.createShaderFromScript_(gl, id);
       shaders[id] = shader;
     }
 
@@ -167,7 +167,7 @@ Landscape.Renderer.setUpWebGL_ = function() {
       var id = Landscape.Renderer.PROGRAM_SHADERS_[i].id;
       var vertex = shaders[Landscape.Renderer.PROGRAM_SHADERS_[i].vertex];
       var fragment = shaders[Landscape.Renderer.PROGRAM_SHADERS_[i].fragment];
-      var program = Landscape.Renderer.createProgram(gl, vertex, fragment);
+      var program = Landscape.Renderer.createProgram_(gl, vertex, fragment);
       this.programs_[id] = program;
     }
   } catch (e) {
@@ -218,8 +218,9 @@ Landscape.Renderer.enableExtension_ = function(gl, extension) {
  * @param {!WebGLRenderingContext} gl The WebGL context.
  * @param {string} scriptId The id if the script tag to read the shader from.
  * @return {!WebGLShader}
+ * @private
  */
-Landscape.Renderer.createShaderFromScript = function(gl, scriptId) {
+Landscape.Renderer.createShaderFromScript_ = function(gl, scriptId) {
   // Reads the shader code.
   var shaderScript = document.getElementById(scriptId);
   if (!shaderScript) {
@@ -266,8 +267,9 @@ Landscape.Renderer.createShaderFromScript = function(gl, scriptId) {
  * @param {!WebGLShader} vertexShader The vertex shader.
  * @param {!WebGLShader} fragmentSahder The fragment shader.
  * @return {!WebGLProgram} The program to use for the draw call.
+ * @private
  */
-Landscape.Renderer.createProgram = function(gl, vertexShader, fragmentSahder) {
+Landscape.Renderer.createProgram_ = function(gl, vertexShader, fragmentSahder) {
   // Creates the program and attaches the shaders.
   var program = gl.createProgram();
   gl.attachShader(program, vertexShader);
@@ -420,15 +422,17 @@ Landscape.Renderer.prototype.drawMountains_ = function() {
   this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, buffer2);
   var barycentric = this.generateBarycentric();
   this.gl_.bufferData(this.gl_.ARRAY_BUFFER, barycentric, this.gl_.STATIC_DRAW);
-  // this.gl_.enableVertexAttribArray(barycentricLoc);
-  // this.gl_.vertexAttribPointer(barycentricLoc, 3, this.gl_.FLOAT, false, 0, 0);
+  this.gl_.enableVertexAttribArray(barycentricLoc);
+  this.gl_.vertexAttribPointer(barycentricLoc, 3, this.gl_.FLOAT, false, 0, 0);
 
   // Draws the grid. The whole grid is displayed as one triangle strip per line.
   var dimension = Landscape.Renderer.GRID_DIMENSION_;
   var verticesPerStrip = 2 * dimension + 2;
   for (var i = 0; i < dimension; i++) {
+    // The offset must be a multiple of the size of UNSIGNED_SHORT, which is
+    // two bytes long.
     this.gl_.drawElements(this.gl_.TRIANGLE_STRIP, verticesPerStrip,
-        this.gl_.UNSIGNED_SHORT, i * verticesPerStrip);
+        this.gl_.UNSIGNED_SHORT, i * verticesPerStrip * 2);
   }
 };
 
@@ -437,10 +441,9 @@ Landscape.Renderer.prototype.drawMountains_ = function() {
  * Generates the vertices for the grid used for the mountains.
  *
  * The grid will contain of GRID_DIMENSION_ squares in each direction, aligned
- * around the origin in the xz plane. Each of the squares will itself consist of
- * two triangles.
+ * around the origin. Each of the squares will itself consist of two triangles.
  * The vertices will be ordered by lines from bottom to top (increasing in x).
- * Each line will be ordered from left to right (increasing z value).
+ * Each line will be ordered from left to right (increasing y value).
  *
  * @return {!Float32Array} The vertices of the grid.
  * @private
@@ -451,14 +454,10 @@ Landscape.Renderer.prototype.generateGrid = function() {
   var array = new Float32Array(size);
 
   var half = dimension / 2;
-  for (var i = -half; i <= half; i++) {
+  for (var i = -half, idx = 0; i <= half; i++) {
     for (var j = -half; j <= half; j++) {
-      var idx = 2 * ((dimension + 1) * i + j);
-
-      // Positions a vertex at position (i, 0, j). All vertices are in the xz
-      // plane.
-      array[idx] = i;
-      array[idx + 1] = j;
+      array[idx++] = j;
+      array[idx++] = i;
     }
   }
   return array;
@@ -509,7 +508,20 @@ Landscape.Renderer.prototype.generateBarycentric = function() {
 
   for (var i = 0; i <= dimension; i++) {
     for (var j = 0; j <= dimension; j++) {
-      var coord = ((i % 3) + j) % 3;
+      var coord;
+      switch(i % 3) {
+        case 0:
+          coord = 0;
+          break;
+        case 1:
+          coord = 2;
+          break;
+        case 2:
+          coord = 1;
+          break;
+      }
+      coord = (coord + j) % 3;
+
       var idx = 3 * (i * (dimension + 1) + j);
       array[idx] = possibilites[3 * coord];
       array[idx + 1] = possibilites[3 * coord + 1];
