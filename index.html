@@ -4,14 +4,14 @@
     <title>Landscape Renderer</title>
     <link rel="stylesheet" type="text/css" href="layout.css">
     <script id="wireframeVertex" type="x-shader/x-vertex">
-      attribute vec3 a_position;
+      attribute vec2 a_position;
       attribute vec3 a_barycentric;
 
       varying vec3 v_barycentric;
 
       void main() {
         v_barycentric = a_barycentric;
-        gl_Position = vec4(a_position, 1);
+        gl_Position = vec4(a_position.xy, 0, 1);
       }
     </script>
     <script id="wireframeFragment" type="x-shader/x-fragment">
@@ -29,6 +29,7 @@
 
       void main() {
         gl_FragColor = vec4(mix(vec3(0.0), vec3(1), edgeFactor()), 1);
+        gl_FragColor = vec4(0, 1, 0, 1);
       }
     </script>
   </head>

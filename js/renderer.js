@@ -57,19 +57,35 @@ Landscape.Renderer.cancelAnimationFrame_ = window.cancelAnimationFrame ||
 
 
 /**
- * @private {!Array.<string>} The ids of the script tags containing the shaders.
+ * @private @const {!Array.<string>} The ids of the script tags containing the
+ *     shaders.
  */
 Landscape.Renderer.SHADER_IDS_ = [
     'wireframeVertex',
-    'wireframeFragment'];
+    'wireframeFragment'
+];
 
 
 /**
- * @private {!Array.<!{id: string, vertex: string, fragment: string}>} The
- *     combination of the shaders for the programs.
+ * @private @const {!Array.<!{id: string, vertex: string, fragment: string}>}
+ *     The combination of the shaders for the programs.
  */
 Landscape.Renderer.PROGRAM_SHADERS_ = [
-    {id: 'wireframe', vertex: 'wireframeVertex', fragment: 'wireframeFragment'}];
+    {id: 'wireframe', vertex: 'wireframeVertex', fragment: 'wireframeFragment'},
+    {id: 'mountains', vertex: 'wireframeVertex', fragment: 'wireframeFragment'}
+];
+
+
+/**
+ * @private @const {number} The dimension of the grid in x and z direction.
+ *     Since UNSIGNED_SHORT is used in the element array buffer, the grid can't
+ *     contain more than 2^16 vertices. Thus, the dimension should be less then
+ *     2^8.
+ *     With extension OES_element_index_uint UNSIGNED_INT is added and would
+ *     allow up to 2^16 indices. But most probably this would kill the
+ *     performance anyway.
+ */
+Landscape.Renderer.GRID_DIMENSION_ = 2;
 
 
 /**
@@ -293,7 +309,7 @@ Landscape.Renderer.prototype.renderFrame_ = function(timestamp) {
   // Resize the canvas to the current display size.
   this.resize_();
 
-  this.renderWireframeRectangle();
+  this.drawMountains_();
 
   // Proceed with the next frame.
   this.renderingLoopId_ = Landscape.Renderer.requestAnimationFrame_(
@@ -364,4 +380,142 @@ Landscape.Renderer.prototype.renderWireframeRectangle = function() {
   this.gl_.vertexAttribPointer(barycentricLoc, 3, this.gl_.FLOAT, false, 0, 0);
 
   this.gl_.drawArrays(this.gl_.TRIANGLE_STRIP, 0, 4);
+};
+
+
+/**
+ * Draws the mountains.
+ *
+ * Generates a grid in the xz plane of size GRID_DIMENSION_ * GRID_DIMENSION_.
+ * The vertex shader will displace the vertices of the grid by a height map.
+ *
+ * @private
+ */
+Landscape.Renderer.prototype.drawMountains_ = function() {
+  // Program 'mountains' will do the displacement mapping as well as texturing.
+  var program = this.programs_['mountains'];
+  this.gl_.useProgram(program);
+
+  // Creates the vertex buffer.
+  var positionLoc = this.gl_.getAttribLocation(program, 'a_position');
+  var gridBuffer = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, gridBuffer);
+  var grid = this.generateGrid();
+  this.gl_.bufferData(this.gl_.ARRAY_BUFFER, grid, this.gl_.STATIC_DRAW);
+  this.gl_.enableVertexAttribArray(positionLoc);
+  this.gl_.vertexAttribPointer(positionLoc, 2, this.gl_.FLOAT, false, 0, 0);
+
+  // Creates the index buffer. Vertices are used several times.
+  var gridIndicesBuffer = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ELEMENT_ARRAY_BUFFER, gridIndicesBuffer);
+  var indices = this.generateGridIndices();
+  this.gl_.bufferData(this.gl_.ELEMENT_ARRAY_BUFFER, indices,
+      this.gl_.STATIC_DRAW);
+
+  // Creates the buffer for the barycentric coordinates. This one won't be
+  // needed anymore, as soon as texturing is done. Just for debugging.
+  // TODO (pjungeblut): Remove this as soon as possible.
+  var barycentricLoc = this.gl_.getAttribLocation(program, 'a_barycentric');
+  var buffer2 = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, buffer2);
+  var barycentric = this.generateBarycentric();
+  this.gl_.bufferData(this.gl_.ARRAY_BUFFER, barycentric, this.gl_.STATIC_DRAW);
+  // this.gl_.enableVertexAttribArray(barycentricLoc);
+  // this.gl_.vertexAttribPointer(barycentricLoc, 3, this.gl_.FLOAT, false, 0, 0);
+
+  // Draws the grid. The whole grid is displayed as one triangle strip per line.
+  var dimension = Landscape.Renderer.GRID_DIMENSION_;
+  var verticesPerStrip = 2 * dimension + 2;
+  for (var i = 0; i < dimension; i++) {
+    this.gl_.drawElements(this.gl_.TRIANGLE_STRIP, verticesPerStrip,
+        this.gl_.UNSIGNED_SHORT, i * verticesPerStrip);
+  }
+};
+
+
+/**
+ * Generates the vertices for the grid used for the mountains.
+ *
+ * The grid will contain of GRID_DIMENSION_ squares in each direction, aligned
+ * around the origin in the xz plane. Each of the squares will itself consist of
+ * two triangles.
+ * The vertices will be ordered by lines from bottom to top (increasing in x).
+ * Each line will be ordered from left to right (increasing z value).
+ *
+ * @return {!Float32Array} The vertices of the grid.
+ * @private
+ */
+Landscape.Renderer.prototype.generateGrid = function() {
+  var dimension = Landscape.Renderer.GRID_DIMENSION_;
+  var size = 2 * (dimension + 1) * (dimension + 1);
+  var array = new Float32Array(size);
+
+  var half = dimension / 2;
+  for (var i = -half; i <= half; i++) {
+    for (var j = -half; j <= half; j++) {
+      var idx = 2 * ((dimension + 1) * i + j);
+
+      // Positions a vertex at position (i, 0, j). All vertices are in the xz
+      // plane.
+      array[idx] = i;
+      array[idx + 1] = j;
+    }
+  }
+  return array;
+};
+
+
+/**
+ * Generated the grid indices for a shared vertex representation of the grids.
+ * The indices will be ordered to allow the use of GRID_DIMENSION_
+ * TRIANGLE_STRIPs. One for each line of the grid.
+ *
+ * @return {!Uint16Array} The indices to use for the grid.
+ * @private
+ */
+Landscape.Renderer.prototype.generateGridIndices = function() {
+  var dimension = Landscape.Renderer.GRID_DIMENSION_;
+  var size = (2 * dimension + 2) * dimension;
+  var array = new Uint16Array(size);
+
+  // Create one TRIANGLE_STRIP per line of the grid, from small x to greater x.
+  for (var i = 0, idx = 0; i < dimension; i++) {
+    var start1 = i * (dimension + 1);
+    var start2 = (i + 1) * (dimension + 1);
+    array[idx++] = start1;
+    array[idx++] = start2;
+
+    for (var j = 1; j <= dimension; j++) {
+      array[idx++] = start1 + j;
+      array[idx++] = start2 + j;
+    }
+  }
+
+  return array;
+};
+
+
+// TODO (pjungeblut): Remove me, as soon as the grid is displayed correctly.
+Landscape.Renderer.prototype.generateBarycentric = function() {
+  var dimension = Landscape.Renderer.GRID_DIMENSION_;
+  var size = 3 * (dimension + 1) * (dimension + 1);
+  var array = new Float32Array(size);
+
+  var possibilites = [
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1
+  ];
+
+  for (var i = 0; i <= dimension; i++) {
+    for (var j = 0; j <= dimension; j++) {
+      var coord = ((i % 3) + j) % 3;
+      var idx = 3 * (i * (dimension + 1) + j);
+      array[idx] = possibilites[3 * coord];
+      array[idx + 1] = possibilites[3 * coord + 1];
+      array[idx + 2] = possibilites[3 * coord + 2];
+    }
+  }
+
+  return array;
 };
