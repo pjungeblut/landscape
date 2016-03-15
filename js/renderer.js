@@ -35,6 +35,17 @@ Landscape.Renderer = function(canvas) {
    * @private {!WebGLRenderingContext} The WebGL rendering context.
    */
   this.gl_ = Landscape.Renderer.setUpWebGL_.call(this);
+
+  /**
+   * @private {!Float32Array} The buffer with the grid vertices.
+   */
+  this.gridVertices_ = new Float32Array(0);
+
+  /**
+   * @private {!Uint16Array} The buffer with the indices for the grid triangle
+   *     strips.
+   */
+  this.gridIndices_ = new Uint16Array(0);
 };
 
 
@@ -85,7 +96,7 @@ Landscape.Renderer.PROGRAM_SHADERS_ = [
  *     allow up to 2^16 indices. But most probably this would kill the
  *     performance anyway.
  */
-Landscape.Renderer.GRID_DIMENSION_ = 2;
+Landscape.Renderer.GRID_DIMENSION_ = 20;
 
 
 /**
@@ -292,9 +303,16 @@ Landscape.Renderer.createProgram_ = function(gl, vertexShader, fragmentSahder) {
  * Starts the rendering loop. Starts a requestAnimationFrame loop.
  */
 Landscape.Renderer.prototype.startRendering = function() {
+  // Stop any active rendering loops.
   if (this.renderingLoopId_ != 0) {
     Landscape.Renderer.cancelAnimationFrame_(this.renderingLoopId_);
   }
+
+  // Load the buffers. They are only created once and then used in every frame.
+  this.gridVertices_ = this.generateGrid_();
+  this.gridIndices_ = this.generateGridIndices_();
+
+  // Start the rendering.
   this.renderingLoopId_ = Landscape.Renderer.requestAnimationFrame_(
       this.renderFrame_.bind(this));
 };
@@ -402,16 +420,15 @@ Landscape.Renderer.prototype.drawMountains_ = function() {
   var positionLoc = this.gl_.getAttribLocation(program, 'a_position');
   var gridBuffer = this.gl_.createBuffer();
   this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, gridBuffer);
-  var grid = this.generateGrid();
-  this.gl_.bufferData(this.gl_.ARRAY_BUFFER, grid, this.gl_.STATIC_DRAW);
+  this.gl_.bufferData(this.gl_.ARRAY_BUFFER, this.gridVertices_,
+      this.gl_.STATIC_DRAW);
   this.gl_.enableVertexAttribArray(positionLoc);
   this.gl_.vertexAttribPointer(positionLoc, 2, this.gl_.FLOAT, false, 0, 0);
 
   // Creates the index buffer. Vertices are used several times.
   var gridIndicesBuffer = this.gl_.createBuffer();
   this.gl_.bindBuffer(this.gl_.ELEMENT_ARRAY_BUFFER, gridIndicesBuffer);
-  var indices = this.generateGridIndices();
-  this.gl_.bufferData(this.gl_.ELEMENT_ARRAY_BUFFER, indices,
+  this.gl_.bufferData(this.gl_.ELEMENT_ARRAY_BUFFER, this.gridIndices_,
       this.gl_.STATIC_DRAW);
 
   // Creates the buffer for the barycentric coordinates. This one won't be
@@ -448,7 +465,7 @@ Landscape.Renderer.prototype.drawMountains_ = function() {
  * @return {!Float32Array} The vertices of the grid.
  * @private
  */
-Landscape.Renderer.prototype.generateGrid = function() {
+Landscape.Renderer.prototype.generateGrid_ = function() {
   var dimension = Landscape.Renderer.GRID_DIMENSION_;
   var size = 2 * (dimension + 1) * (dimension + 1);
   var array = new Float32Array(size);
@@ -472,7 +489,7 @@ Landscape.Renderer.prototype.generateGrid = function() {
  * @return {!Uint16Array} The indices to use for the grid.
  * @private
  */
-Landscape.Renderer.prototype.generateGridIndices = function() {
+Landscape.Renderer.prototype.generateGridIndices_ = function() {
   var dimension = Landscape.Renderer.GRID_DIMENSION_;
   var size = (2 * dimension + 2) * dimension;
   var array = new Uint16Array(size);
