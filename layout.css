@@ -6,7 +6,16 @@ html, body {
   overflow: hidden;
 }
 
-#landscapeCanvas {
-  width: 100%;
+.landscape {
+  width: calc(100% - 400px);
   height: 100%;
+}
+
+.controls {
+  position: absolute;
+  width: 400px;
+  height: 100%;
+  top: 0px;
+  right: 0px;
+  background-color: #CCCCCC;
 }

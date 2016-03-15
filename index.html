@@ -11,7 +11,7 @@
 
       void main() {
         v_barycentric = a_barycentric;
-        gl_Position = vec4(a_position.xy, 0, 2);
+        gl_Position = vec4(a_position.xy, 0, 15);
       }
     </script>
     <script id="wireframeFragment" type="x-shader/x-fragment">
@@ -33,7 +33,35 @@
     </script>
   </head>
   <body>
-    <canvas id="landscapeCanvas"></canvas>
+    <canvas id="landscapeCanvas" class="landscape"></canvas>
+    <div class="controls">
+      <h1>Controls</h1>
+      <form>
+        <table>
+          <tr>
+            <td>Camera x:</td>
+            <td>
+              <input type="range" id="camerax" defaultValue="0" min="-100"
+                  max="100" step="1">
+            </td>
+          </tr>
+          <tr>
+            <td>Camera y:</td>
+            <td>
+              <input type="range" id="cameray" defaultValue="0" min="-100"
+                  max="100" step="1">
+            </td>
+          </tr>
+          <tr>
+            <td>Camera z:</td>
+            <td>
+              <input type="range" id="cameraz" defaultValue="0" min="-100"
+                  max="100" step="1">
+            </td>
+          </tr>
+        </table>
+      </form>
+    </div>
     <script type="text/javascript" src="landscape.js"></script>
   </body>
 </html>

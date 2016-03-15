@@ -1,15 +1,23 @@
 goog.provide('Landscape.Renderer');
 
+goog.require('Landscape.Controls');
+
 
 
 /**
  * Main class for the landscape renderer.
  * Initializes the WebGL canvas and sets everything up to enable rendering.
  *
+ * @param {!Landscape.Controls} controls The user controlled parameters.
  * @param {!HTMLCanvasElement} canvas The canvas to render into.
  * @constructor
  */
-Landscape.Renderer = function(canvas) {
+Landscape.Renderer = function(controls, canvas) {
+  /**
+   * @private @const {!Landscape.Controls} The user controlled parameters.
+   */
+  this.controls_ = controls;
+
   /**
    * @private {number} The id of the rendering loop. Rendering is done in a
    *     requestAnimationFrame loop that needs to be stopped when the context is
@@ -37,15 +45,15 @@ Landscape.Renderer = function(canvas) {
   this.gl_ = Landscape.Renderer.setUpWebGL_.call(this);
 
   /**
-   * @private {!Float32Array} The buffer with the grid vertices.
+   * @private {WebGLBuffer} The buffer with the grid vertices.
    */
-  this.gridVertices_ = new Float32Array(0);
+  this.gridVertices_ = null;
 
   /**
-   * @private {!Uint16Array} The buffer with the indices for the grid triangle
+   * @private {WebGLBuffer} The buffer with the indices for the grid triangle
    *     strips.
    */
-  this.gridIndices_ = new Uint16Array(0);
+  this.gridIndices_ = null;
 };
 
 
@@ -329,6 +337,7 @@ Landscape.Renderer.prototype.renderFrame_ = function(timestamp) {
   // Resize the canvas to the current display size.
   this.resize_();
 
+  // Draw everything.
   this.drawMountains_();
 
   // Proceed with the next frame.
@@ -416,20 +425,14 @@ Landscape.Renderer.prototype.drawMountains_ = function() {
   var program = this.programs_['mountains'];
   this.gl_.useProgram(program);
 
-  // Creates the vertex buffer.
+  // Binds the vertex buffer.
+  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, this.gridVertices_);
   var positionLoc = this.gl_.getAttribLocation(program, 'a_position');
-  var gridBuffer = this.gl_.createBuffer();
-  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, gridBuffer);
-  this.gl_.bufferData(this.gl_.ARRAY_BUFFER, this.gridVertices_,
-      this.gl_.STATIC_DRAW);
   this.gl_.enableVertexAttribArray(positionLoc);
   this.gl_.vertexAttribPointer(positionLoc, 2, this.gl_.FLOAT, false, 0, 0);
 
-  // Creates the index buffer. Vertices are used several times.
-  var gridIndicesBuffer = this.gl_.createBuffer();
-  this.gl_.bindBuffer(this.gl_.ELEMENT_ARRAY_BUFFER, gridIndicesBuffer);
-  this.gl_.bufferData(this.gl_.ELEMENT_ARRAY_BUFFER, this.gridIndices_,
-      this.gl_.STATIC_DRAW);
+  // Binds the index buffer. Vertices are used several times.
+  this.gl_.bindBuffer(this.gl_.ELEMENT_ARRAY_BUFFER, this.gridIndices_);
 
   // Creates the buffer for the barycentric coordinates. This one won't be
   // needed anymore, as soon as texturing is done. Just for debugging.
@@ -462,7 +465,7 @@ Landscape.Renderer.prototype.drawMountains_ = function() {
  * The vertices will be ordered by lines from bottom to top (increasing in x).
  * Each line will be ordered from left to right (increasing y value).
  *
- * @return {!Float32Array} The vertices of the grid.
+ * @return {!WebGLBuffer} The vertices of the grid.
  * @private
  */
 Landscape.Renderer.prototype.generateGrid_ = function() {
@@ -477,7 +480,11 @@ Landscape.Renderer.prototype.generateGrid_ = function() {
       array[idx++] = i;
     }
   }
-  return array;
+
+  var buffer = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ARRAY_BUFFER, buffer);
+  this.gl_.bufferData(this.gl_.ARRAY_BUFFER, array, this.gl_.STATIC_DRAW);
+  return buffer;
 };
 
 
@@ -486,7 +493,7 @@ Landscape.Renderer.prototype.generateGrid_ = function() {
  * The indices will be ordered to allow the use of GRID_DIMENSION_
  * TRIANGLE_STRIPs. One for each line of the grid.
  *
- * @return {!Uint16Array} The indices to use for the grid.
+ * @return {!WebGLBuffer} The indices to use for the grid.
  * @private
  */
 Landscape.Renderer.prototype.generateGridIndices_ = function() {
@@ -507,7 +514,11 @@ Landscape.Renderer.prototype.generateGridIndices_ = function() {
     }
   }
 
-  return array;
+  var buffer = this.gl_.createBuffer();
+  this.gl_.bindBuffer(this.gl_.ELEMENT_ARRAY_BUFFER, buffer);
+  this.gl_.bufferData(this.gl_.ELEMENT_ARRAY_BUFFER, array,
+      this.gl_.STATIC_DRAW);
+  return buffer;
 };
 
 

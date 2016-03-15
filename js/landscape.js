@@ -1,5 +1,6 @@
 goog.provide('Landscape');
 
+goog.require('Landscape.Controls');
 goog.require('Landscape.Renderer');
 
 
@@ -27,18 +28,10 @@ Landscape.CANVAS_ID = 'landscapeCanvas';
     return /** @type {!HTMLCanvasElement} */ (canvas);
   }
 
-  /**
-   * Initializes the renderer and the controls.
-   */
-  function initRendering() {
-    var renderer = new Landscape.Renderer(getCanvas());
-    renderer.startRendering();
-  }
-
   // Starts everything.
   window.addEventListener('load', function() {
-    // Start rendering.
-    initRendering();
-    console.log('Started');
+    var controls = new Landscape.Controls();
+    var renderer = new Landscape.Renderer(controls, getCanvas());
+    renderer.startRendering();
   });
 })();
